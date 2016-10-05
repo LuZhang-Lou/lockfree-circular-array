@@ -15,6 +15,12 @@ class MutexSet {
     std::unique_lock<std::mutex> loc(mutex_);
     return set_.insert(val);
   };
+
+  iterator find(const T& val) {
+    std::unique_lock<std::mutex> loc(mutex_);
+    return set_.find(val);
+  }
+
  private:
   std::mutex mutex_;
   std::unordered_set<T> set_;
