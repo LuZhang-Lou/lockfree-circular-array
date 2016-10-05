@@ -5,9 +5,9 @@
 #include <iostream>
 #include <stdatomic.h>
 #include <thread>
+#include <vector>
+#include <set>
 #include "mutex_set.h"
-
-
 
 template <typename T>
 class LockFreeCircularArray {
@@ -51,17 +51,19 @@ class LockFreeCircularArray {
     return true;
   }
 
-  T pop() {
+  T pop(bool* res) {
     uint32_t read_idx_snapshot;
     T e;
     do {
       read_idx_snapshot = read_idx_;
-      // if (MODCAP(read_idx_snapshot) == MODCAP(read_guard_idx_))
-      if (read_idx_snapshot == read_guard_idx_)
-        return false;
+      if (read_idx_snapshot == read_guard_idx_) {
+        *res = false;
+        return 0;
+      }
       // e = array_[MODCAP(read_idx_snapshot)];
       if (!atomic_compare_exchange_strong(&read_idx_, &read_idx_snapshot, read_idx_snapshot+1))
         continue;
+      *res = true;
       return array_[ModCap(read_idx_snapshot)];
     } while (true);
   }
@@ -75,7 +77,6 @@ class LockFreeCircularArray {
   _Atomic(uint32_t) read_idx_;
   _Atomic(uint32_t) read_guard_idx_;
 
-
   inline uint32_t ModCap(uint32_t idx) {
     return  idx % capacity_;
   }
@@ -87,65 +88,54 @@ void producer(LockFreeCircularArray<uint32_t >* queue, uint32_t start, uint32_t 
   for (uint32_t i = start; i < end; ++i) {
     do {
       ret = queue->push(i);
-      if (ret) {
-        std::cout << "pushing " << i << " size:" << queue->size() << std::endl;
-      } else {
-        std::cout << "[FAIL] pushing " << i << " queue full." << std::endl;
-      }
     } while (!ret);
   }
 }
 
-void consumer(LockFreeCircularArray<uint32_t >* queue) {
+void consumer(LockFreeCircularArray<uint32_t >* queue, std::set<uint32_t >* set) {
   while (queue->size() != 0) {
-    uint32_t val = queue->pop();
-    std::cout << "popping " << val << " size:" << queue->size() << std::endl;
+    bool res;
+    uint32_t val = queue->pop(&res);
+    if (res) {
+      set->insert(val);
+    }
   }
 }
 
 int main() {
   std::cout << "Hello, LockFree!" << std::endl;
   LockFreeCircularArray<uint32_t > queue;
-  std::thread prod1(producer, &queue, 0, 10);
-  //std::thread consumer1(consumer, &queue);
-  std::thread prod2(producer, &queue, 10, 20);
-  //std::thread consumer2(consumer, &queue);
-  std::thread prod3(producer, &queue, 20, 30);
-  //std::thread consumer3(consumer, &queue);
+  MutexSet<uint32_t> set;
+  std::vector<std::set<uint32_t> > sets(5);
+  std::thread prod1(producer, &queue, 0, 10000);
+  std::thread prod2(producer, &queue, 10000, 20000);
+  std::thread consumer1(consumer, &queue, &sets[0]);
+  std::thread consumer2(consumer, &queue, &sets[1]);
+  std::thread prod3(producer, &queue, 20000, 30000);
+  std::thread prod4(producer, &queue, 30000, 40000);
+  std::thread consumer3(consumer, &queue, &sets[2]);
+  std::thread consumer4(consumer, &queue, &sets[3]);
+  std::thread consumer5(consumer, &queue, &sets[4]);
   prod1.join();
+  consumer3.join();
   prod2.join();
+  consumer1.join();
+  consumer2.join();
   prod3.join();
-  //consumer1.join();
-  //consumer2.join();
-  //consumer3.join();
+  prod4.join();
+  consumer4.join();
+  consumer5.join();
+  for (uint32_t i = 0; i < 40000u; ++i) {
+    uint8_t j = 0;
+    while (j < 5u) {
+      if (sets[j].find(i) != sets[j].end()) {
+        break;
+      }
+      ++j;
+    }
+    if (j == 5u) {
+      std::cout << "missing : " << i << std::endl;
+    }
+  }
   return 0;
-  /*
-  uint32_t cnt = 1 << 3;
-  for (uint32_t i = 0; i < cnt ; ++i) {
-    bool ret = queue.push(i);
-    if (ret) {
-      std::cout << "after pushing " << i << " queue size:" << queue.size() << std::endl;
-    } else {
-      std::cout << "[FAIL] pushing " << i << " queue full." << std::endl;
-    }
-  }
-  for (uint32_t i = 0; i < cnt-2; ++i) {
-    uint32_t val = queue.pop();
-    std::cout << "after popping " << val << " queue size:" << queue.size() << std::endl;
-  }
-  bool ret;
-  uint32_t i = 0;
-  while ((ret = queue.push(i++))) {
-    if (ret) {
-      std::cout << "after pushing " << i << " queue size:" << queue.size() << std::endl;
-    } else {
-      std::cout << "[FAIL] pushing " << i << " queue full." << std::endl;
-    }
-  }
-  while (queue.size() != 0) {
-    uint32_t val = queue.pop();
-    std::cout << "after popping " << val << " queue size:" << queue.size() << std::endl;
-  }
-   */
-
 }
