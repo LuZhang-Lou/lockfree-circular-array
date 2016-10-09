@@ -3,7 +3,7 @@
 //
 
 #include <iostream>
-#include <stdatomic.h>
+#include <atomic>
 #include <thread>
 #include <vector>
 #include <set>
@@ -73,9 +73,9 @@ class LockFreeCircularArray {
   uint32_t kDefaultCapacity = 1 << 10;
   uint32_t capacity_ = kDefaultCapacity;
   T* array_;
-  _Atomic(uint32_t) write_idx_;
-  _Atomic(uint32_t) read_idx_;
-  _Atomic(uint32_t) read_guard_idx_;
+  std::atomic<uint32_t> write_idx_;
+  std::atomic<uint32_t> read_idx_;
+  std::atomic<uint32_t> read_guard_idx_;
 
   inline uint32_t ModCap(uint32_t idx) {
     return  idx % capacity_;
@@ -125,6 +125,7 @@ int main() {
   prod4.join();
   consumer4.join();
   consumer5.join();
+  std::cout << "verifying..: " << std::endl;
   for (uint32_t i = 0; i < 40000u; ++i) {
     uint8_t j = 0;
     while (j < 5u) {

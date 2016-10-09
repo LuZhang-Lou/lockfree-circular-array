@@ -7,10 +7,10 @@
 #include <unordered_set>
 #include <mutex>
 
-template <typename T, typename Comp = std::less<T>>
+template <typename T>
 class MutexSet {
  public:
-  typedef typename std::unordered_set<T, Comp>::iterator iterator;
+  typedef typename std::unordered_set<T>::iterator iterator;
   std::pair<iterator, bool> insert(const T& val) {
     std::unique_lock<std::mutex> loc(mutex_);
     return set_.insert(val);
